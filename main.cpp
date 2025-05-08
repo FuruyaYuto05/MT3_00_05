@@ -2,28 +2,31 @@
 #include <cmath>
 
 const char kWindowTitle[] = "学籍番号";
+const int kRowHeight = 20;
 
-// ---------- 構造体定義 ----------
+// Vector3構造体
 struct Vector3 {
 	float x;
 	float y;
 	float z;
 };
 
+// Matrix4x4構造体
 struct Matrix4x4 {
 	float m[4][4];
 };
 
-// ---------- 行列作成関数 ----------
+// スケーリング行列
 Matrix4x4 MakeScaleMatrix(const Vector3& scale) {
-	return {
-		scale.x, 0, 0, 0,
-		0, scale.y, 0, 0,
-		0, 0, scale.z, 0,
-		0, 0, 0, 1
-	};
+	Matrix4x4 result{};
+	result.m[0][0] = scale.x;
+	result.m[1][1] = scale.y;
+	result.m[2][2] = scale.z;
+	result.m[3][3] = 1.0f;
+	return result;
 }
 
+// 回転行列X
 Matrix4x4 MakeRotateXMatrix(float radian) {
 	Matrix4x4 result{};
 	result.m[0][0] = 1.0f;
@@ -35,6 +38,7 @@ Matrix4x4 MakeRotateXMatrix(float radian) {
 	return result;
 }
 
+// 回転行列Y
 Matrix4x4 MakeRotateYMatrix(float radian) {
 	Matrix4x4 result{};
 	result.m[0][0] = cosf(radian);
@@ -46,6 +50,7 @@ Matrix4x4 MakeRotateYMatrix(float radian) {
 	return result;
 }
 
+// 回転行列Z
 Matrix4x4 MakeRotateZMatrix(float radian) {
 	Matrix4x4 result{};
 	result.m[0][0] = cosf(radian);
@@ -57,15 +62,20 @@ Matrix4x4 MakeRotateZMatrix(float radian) {
 	return result;
 }
 
+// 移動行列
 Matrix4x4 MakeTranslateMatrix(const Vector3& translate) {
-	return {
-		1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 1, 0,
-		translate.x, translate.y, translate.z, 1
-	};
+	Matrix4x4 result{};
+	result.m[0][0] = 1.0f;
+	result.m[1][1] = 1.0f;
+	result.m[2][2] = 1.0f;
+	result.m[3][3] = 1.0f;
+	result.m[3][0] = translate.x;
+	result.m[3][1] = translate.y;
+	result.m[3][2] = translate.z;
+	return result;
 }
 
+// 行列積
 Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
 	Matrix4x4 result{};
 	for (int row = 0; row < 4; ++row) {
@@ -80,47 +90,29 @@ Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
 	return result;
 }
 
-// アフィン変換行列の作成
+// アフィン変換行列
 Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate) {
-	Matrix4x4 matScale = MakeScaleMatrix(scale);
-	Matrix4x4 matRotX = MakeRotateXMatrix(rotate.x);
-	Matrix4x4 matRotY = MakeRotateYMatrix(rotate.y);
-	Matrix4x4 matRotZ = MakeRotateZMatrix(rotate.z);
+	Matrix4x4 scaleMatrix = MakeScaleMatrix(scale);
+	Matrix4x4 rotateXMatrix = MakeRotateXMatrix(rotate.x);
+	Matrix4x4 rotateYMatrix = MakeRotateYMatrix(rotate.y);
+	Matrix4x4 rotateZMatrix = MakeRotateZMatrix(rotate.z);
+	Matrix4x4 rotateMatrix = Multiply(rotateXMatrix, Multiply(rotateYMatrix, rotateZMatrix));
+	Matrix4x4 translateMatrix = MakeTranslateMatrix(translate);
 
-	
-	Matrix4x4 matRot = Multiply(Multiply(matRotZ, matRotX), matRotY);
-	Matrix4x4 matTrans = MakeTranslateMatrix(translate);
-
-
-	Matrix4x4 matWorld = Multiply(Multiply(matScale, matRot), matTrans);
-	return matWorld;
+	return Multiply(scaleMatrix, Multiply(rotateMatrix, translateMatrix));
 }
 
-// ---------- 描画用ユーティリティ ----------
-static const int kColumnWidth = 60;
-static const int kRowHeight = 20;
-
-void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) {
-	Novice::ScreenPrintf(x, y, "%.02f", vector.x);
-	Novice::ScreenPrintf(x + kColumnWidth, y, "%.02f", vector.y);
-	Novice::ScreenPrintf(x + kColumnWidth * 2, y, "%.02f", vector.z);
-	Novice::ScreenPrintf(x + kColumnWidth * 3, y, "%s", label);
-}
-
+// 行列表示
 void MatrixScreenPrintf(int x, int y, const Matrix4x4& matrix, const char* label) {
 	Novice::ScreenPrintf(x, y, "%s", label);
-	for (int row = 0; row < 4; ++row) {
-		for (int column = 0; column < 4; column++) {
-			Novice::ScreenPrintf(
-				x + column * kColumnWidth,
-				y + (row + 1) * kRowHeight,
-				"%6.02f", matrix.m[row][column]
-			);
-		}
+	for (int row = 0; row < 4; row++) {
+		Novice::ScreenPrintf(x, y + (row + 1) * kRowHeight,
+			"%.2f  %.2f  %.2f  %.2f",
+			matrix.m[row][0], matrix.m[row][1], matrix.m[row][2], matrix.m[row][3]);
 	}
 }
 
-// ---------- エントリーポイント ----------
+// エントリーポイント
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
@@ -132,14 +124,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		memcpy(preKeys, keys, 256);
 		Novice::GetHitKeyStateAll(keys);
 
+		// 更新処理
 		Vector3 scale{ 1.2f, 0.79f, -2.1f };
 		Vector3 rotate{ 0.4f, 1.43f, -0.8f };
 		Vector3 translate{ 2.7f, -4.15f, 1.57f };
 		Matrix4x4 worldMatrix = MakeAffineMatrix(scale, rotate, translate);
 
+		// 描画処理
 		MatrixScreenPrintf(0, 0, worldMatrix, "worldMatrix");
 
 		Novice::EndFrame();
+
 		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
 			break;
 		}
